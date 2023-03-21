@@ -44,17 +44,21 @@ class CreditFilters extends QueryFilters
 
         $credit_filters = [];
 
-        if (in_array('draft', $status_parameters)) 
+        if (in_array('draft', $status_parameters)) {
             $credit_filters[] = Credit::STATUS_DRAFT;
+        }
         
-        if (in_array('partial', $status_parameters)) 
+        if (in_array('partial', $status_parameters)) {
             $credit_filters[] = Credit::STATUS_PARTIAL;
+        }
 
-        if (in_array('applied', $status_parameters)) 
+        if (in_array('applied', $status_parameters)) {
             $credit_filters[] = Credit::STATUS_APPLIED;
+        }
 
-        if(count($credit_filters) >=1)
+        if (count($credit_filters) >=1) {
             $this->builder->whereIn('status_id', $credit_filters);
+        }
 
         return $this->builder;
     }
@@ -81,7 +85,10 @@ class CreditFilters extends QueryFilters
                           ->orWhere('credits.custom_value1', 'like', '%'.$filter.'%')
                           ->orWhere('credits.custom_value2', 'like', '%'.$filter.'%')
                           ->orWhere('credits.custom_value3', 'like', '%'.$filter.'%')
-                          ->orWhere('credits.custom_value4', 'like', '%'.$filter.'%');
+                          ->orWhere('credits.custom_value4', 'like', '%'.$filter.'%')
+                          ->orWhereHas('client', function ($q) use ($filter) {
+                              $q->where('name', 'like', '%'.$filter.'%');
+                          });
         });
     }
 

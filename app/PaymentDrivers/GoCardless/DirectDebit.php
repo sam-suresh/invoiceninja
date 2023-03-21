@@ -16,7 +16,6 @@ use App\Exceptions\PaymentFailed;
 use App\Http\Requests\ClientPortal\Payments\PaymentResponseRequest;
 use App\Jobs\Mail\PaymentFailureMailer;
 use App\Jobs\Util\SystemLogger;
-use App\Models\ClientGatewayToken;
 use App\Models\GatewayType;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -68,6 +67,7 @@ class DirectDebit implements MethodInterface
                         'address_line1' => auth()->guard('contact')->user()->client->address1 ?: '',
                         'city' => auth()->guard('contact')->user()->client->city ?: '',
                         'postal_code' => auth()->guard('contact')->user()->client->postal_code ?: '',
+                        'country_code' => auth()->guard('contact')->user()->client->country->iso_3166_2,
                     ],
                 ],
             ]);
@@ -125,7 +125,7 @@ class DirectDebit implements MethodInterface
             $data = [
                 'payment_meta' => $payment_meta,
                 'token' => $redirect_flow->links->mandate,
-                'payment_method_id' => GatewayType::DIRECT_DEBIT,
+                'payment_method_id' => $this->resolveScheme($redirect_flow->scheme),
             ];
 
             $payment_method = $this->go_cardless->storeGatewayToken($data, ['gateway_customer_reference' => $redirect_flow->links->customer]);
@@ -135,6 +135,17 @@ class DirectDebit implements MethodInterface
             return $this->processUnsuccessfulAuthorization($exception);
         }
     }
+
+    private function resolveScheme(string $scheme): int
+    {
+        match ($scheme) {
+            'sepa_core' => $type = GatewayType::SEPA,
+            default => $type = GatewayType::DIRECT_DEBIT,
+        };
+
+        return $type;
+    }
+
 
     /**
      * Payment view for Direct Debit.

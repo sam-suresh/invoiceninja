@@ -69,7 +69,6 @@ class PaymentMigrationRepository extends BaseRepository
      */
     private function applyPayment(array $data, Payment $payment): ?Payment
     {
-
         //check currencies here and fill the exchange rate data if necessary
         if (! $payment->id) {
             $this->processExchangeRates($data, $payment);
@@ -101,7 +100,7 @@ class PaymentMigrationRepository extends BaseRepository
         $payment->deleted_at = $data['deleted_at'] ?: null;
         $payment->save();
 
-        if (array_key_exists('currency_id', $data) && $data['currency_id'] == 0) {
+        if ($payment->currency_id == 0) {
             $payment->currency_id = $payment->company->settings->currency_id;
             $payment->save();
         }

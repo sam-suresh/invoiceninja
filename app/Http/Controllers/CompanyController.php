@@ -13,8 +13,6 @@ namespace App\Http\Controllers;
 
 use App\DataMapper\Analytics\AccountDeleted;
 use App\DataMapper\CompanySettings;
-use App\DataMapper\DefaultSettings;
-use App\Factory\CompanyFactory;
 use App\Http\Requests\Company\CreateCompanyRequest;
 use App\Http\Requests\Company\DefaultCompanyRequest;
 use App\Http\Requests\Company\DestroyCompanyRequest;
@@ -29,7 +27,6 @@ use App\Jobs\Company\CreateCompanyTaskStatuses;
 use App\Jobs\Company\CreateCompanyToken;
 use App\Jobs\Mail\NinjaMailerJob;
 use App\Jobs\Mail\NinjaMailerObject;
-use App\Jobs\Ninja\RefundCancelledAccount;
 use App\Mail\Company\CompanyDeleted;
 use App\Models\Account;
 use App\Models\Company;
@@ -42,9 +39,8 @@ use App\Utils\Traits\MakesHash;
 use App\Utils\Traits\SavesDocuments;
 use App\Utils\Traits\Uploadable;
 use Illuminate\Foundation\Bus\DispatchesJobs;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Turbo124\Beacon\Facades\LightLogs;
 
 /**
@@ -91,7 +87,7 @@ class CompanyController extends BaseController
      *      description="Lists companies, search and filters allow fine grained lists to be generated.
 
         Query parameters can be added to performed more fine grained filtering of the companies, these are handled by the CompanyFilters class which defines the methods available",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -136,7 +132,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Gets a new blank company object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -181,7 +177,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Adds a company",
      *      description="Adds an company to the system",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -264,7 +260,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Shows an company",
      *      description="Displays an company by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -318,7 +314,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Shows an company for editting",
      *      description="Displays an company by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -372,7 +368,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Updates an company",
      *      description="Handles the updating of an company by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -441,7 +437,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Deletes a company",
      *      description="Handles the deletion of an company by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -491,6 +487,11 @@ class CompanyController extends BaseController
                 $company_user->forceDelete();
             });
 
+            try {
+                Storage::disk(config('filesystems.default'))->deleteDirectory($company->company_key);
+            } catch(\Exception $e) {
+            }
+
             $account->delete();
 
             if (Ninja::isHosted()) {
@@ -499,7 +500,7 @@ class CompanyController extends BaseController
 
             LightLogs::create(new AccountDeleted())
                      ->increment()
-                     ->queue();
+                     ->batch();
         } else {
             $company_id = $company->id;
 
@@ -515,6 +516,12 @@ class CompanyController extends BaseController
             $nmo->settings = $other_company->settings;
             $nmo->to_user = auth()->user();
             (new NinjaMailerJob($nmo, true))->handle();
+
+            try {
+                Storage::disk(config('filesystems.default'))->deleteDirectory($company->company_key);
+            } catch(\Exception $e) {
+            }
+
 
             $company->delete();
 
@@ -544,7 +551,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Uploads a document to a company",
      *      description="Handles the uploading of a document to a company",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -607,7 +614,7 @@ class CompanyController extends BaseController
      *      tags={"companies"},
      *      summary="Sets the company as the default company.",
      *      description="Sets the company as the default company.",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
